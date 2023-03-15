@@ -1,6 +1,9 @@
 #include "orb-slam-port/orb_slam_ros.hpp"
 
 #include <opencv2/core/core.hpp>
+#include "Tracking.h"
+
+typedef ORB_SLAM3::Tracking::eTrackingState TrackingState;
 
 OrbSlamROS::OrbSlamROS() : rclcpp::Node("orb_slam3") {
     this->decalre_parameters();
@@ -46,7 +49,7 @@ OrbSlamROS::setup_gst_capture() {
     std::string vdev = this->get_parameter("vid_dev").as_string();
     std::string gstfmt = 
         "v4l2src device=%s ! "
-        "videoconvert ! videorate ! videoscale ! "
+        "decodebin ! videoconvert ! videorate ! videoscale ! "
         "video/x-raw, framerate=%d/1, width=%d, height=%d ! "
         "appsink drop=1";
     
@@ -65,13 +68,13 @@ OrbSlamROS::setup_gst_capture() {
 
 void
 OrbSlamROS::setup_file_capture(const std::string& file) {
-    char buffer[256];
+    char buffer[1024];
     std::string gstfmt = 
         "filesrc location=%s ! "
-        "videorate ! "
-        "video/x-raw, framerate=%d/1 ! "
-        "appsink drop=1";
-    int n = std::snprintf(buffer, sizeof(buffer), 
+        "decodebin ! videorate ! "
+        "video/x-raw, framerate=%d/1 ! videoconvert ! "
+        "appsink";
+    int n = std::snprintf(buffer, sizeof(buffer), gstfmt.c_str(),
         file.c_str(), this->fps);
     
     std::string gststr = std::string(buffer, n);
@@ -125,7 +128,12 @@ OrbSlamROS::cv2_feed_spin() {
     header.stamp = this->now();
 
     auto pose = this->SLAM->TrackMonocular(this->currentFrame, header.stamp.sec);
-    // this->accumulatedT = pose.matrix() * this->accumulatedT;
+    
+    if (this->SLAM->GetTrackingState() != TrackingState::OK) {
+        RCLCPP_WARN(this->get_logger(), "Tracking Failed");
+        return;
+    }
+
     auto T = pose.translation();
 
     auto quat = pose.unit_quaternion();

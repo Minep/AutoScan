@@ -16,6 +16,10 @@ def generate_launch_description():
                 ('/pose_image', '/auto_scanner/orbslam/pose_image')
             ],
             parameters= [param_file],
-            
         ),
+        Node(
+            package='auto_scanner',
+            executable='extractor.py',
+            name='depth_extract'
+        )
     ])

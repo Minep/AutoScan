@@ -15,6 +15,8 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -43,6 +45,8 @@ find_package(Eigen REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
+find_package(rclpy REQUIRED)
+
 include_directories(
   ${PROJECT_SOURCE_DIR}/include
   ${ORB_SLAM3_INCLUDE_DIRS}
@@ -59,8 +63,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 
 ament_export_dependencies(rosidl_default_runtime)
-
-ament_package()
+ament_python_install_package(py_modules)
 
 add_executable(orb_slam3 src/orb_slam3/orb_slam_ros.cpp)
 ament_target_dependencies(orb_slam3 rclcpp std_msgs geometry_msgs sensor_msgs ORB_SLAM3 OpenCV cv_bridge Pangolin rclcpp_lifecycle)
@@ -68,8 +71,16 @@ rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typ
 target_link_libraries(orb_slam3 "${cpp_typesupport_target}") 
 
 install(TARGETS
-  orb_slam3
-  DESTINATION lib/${PROJECT_NAME})
+orb_slam3
+DESTINATION lib/${PROJECT_NAME})
+
+install(PROGRAMS
+  scripts/extractor.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config/)
 install(DIRECTORY data/ DESTINATION  share/${PROJECT_NAME}/data/)
+
+ament_package()
