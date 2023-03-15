@@ -1,0 +1,8 @@
+orb_slam3:
+  ros__parameters:
+    vid_dev: "/dev/video0"
+    orb_voc: "data/orb_slam/ORBvoc.txt"
+    cam_cfg: "data/orb_slam/phonecam.yaml"
+    fps: 10
+    rescale_w: 1280
+    rescale_h: 720

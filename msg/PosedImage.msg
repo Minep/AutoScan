@@ -1,0 +1,2 @@
+sensor_msgs/Image image
+geometry_msgs/Pose cam_pose
