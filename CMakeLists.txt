@@ -63,7 +63,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 
 ament_export_dependencies(rosidl_default_runtime)
-ament_python_install_package(py_modules)
+ament_python_install_package(simplerecon)
+ament_python_install_package(options)
 
 add_executable(orb_slam3 src/orb_slam3/orb_slam_ros.cpp)
 ament_target_dependencies(orb_slam3 rclcpp std_msgs geometry_msgs sensor_msgs ORB_SLAM3 OpenCV cv_bridge Pangolin rclcpp_lifecycle)

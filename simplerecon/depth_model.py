@@ -4,15 +4,15 @@ import pytorch_lightning as pl
 import timm
 import torch
 import torch.nn.functional as F
-from losses import MSGradientLoss, MVDepthLoss, NormalsLoss, ScaleInvariantLoss
-from modules.cost_volume import CostVolumeManager, FeatureVolumeManager
-from modules.layers import TensorFormatter
-from modules.networks import (CVEncoder, DepthDecoderPP, UNetMatchingEncoder,
+from .losses import MSGradientLoss, MVDepthLoss, NormalsLoss, ScaleInvariantLoss
+from .modules.cost_volume import CostVolumeManager, FeatureVolumeManager
+from .modules.layers import TensorFormatter
+from .modules.networks import (CVEncoder, DepthDecoderPP, UNetMatchingEncoder,
                              ResnetMatchingEncoder)
 from torch import nn
-from utils.generic_utils import (tensor_B_to_bM,
+from .utils.generic_utils import (tensor_B_to_bM,
                                  tensor_bM_to_B)
-from utils.geometry_utils import NormalGenerator
+from .utils.geometry_utils import NormalGenerator
 
 logger = logging.getLogger(__name__)
 

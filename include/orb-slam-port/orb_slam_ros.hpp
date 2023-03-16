@@ -23,14 +23,16 @@ private:
     ORB_SLAM3::System* SLAM;
     cv::VideoCapture* videoCapture;
     int fps;
+    int fps_low;
+    int fps_scale_ratio;
     int frame_interval;
     rclcpp::Publisher<auto_scanner::msg::PosedImage>::SharedPtr poseImgPub;
+    rclcpp::Publisher<auto_scanner::msg::PosedImage>::SharedPtr poseImgPubLow;
     rclcpp::TimerBase::SharedPtr timer;
     cv::Mat currentFrame;
     float imgScale;
     long frame_id = 0;
-
-    Eigen::Matrix4f accumulatedT;
+    int counter = 0;
 
     void decalre_parameters();
 

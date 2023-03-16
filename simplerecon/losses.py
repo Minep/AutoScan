@@ -4,8 +4,8 @@ import torch.jit as jit
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from utils.geometry_utils import (BackprojectDepth, Project3D)
-from utils.generic_utils import pyrdown
+from .utils.geometry_utils import (BackprojectDepth, Project3D)
+from .utils.generic_utils import pyrdown
 
 
 class MSGradientLoss(nn.Module):

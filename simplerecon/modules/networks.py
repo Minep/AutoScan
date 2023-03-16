@@ -6,8 +6,8 @@ import torch
 from torch import nn
 from torchvision.ops import FeaturePyramidNetwork
 
-from modules.layers import BasicBlock
-from utils.generic_utils import upsample
+from .layers import BasicBlock
+from ..utils.generic_utils import upsample
 
 
 def double_basic_block(num_ch_in, num_ch_out, num_repeats=2):

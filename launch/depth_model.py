@@ -10,17 +10,8 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='auto_scanner',
-            executable='orb_slam3',
-            name='orb_slam3',
-            remappings = [
-                ("/orb_slam3/pose_image_lfreq", "/extractor/pose_image")
-            ],
-            parameters= [param_file],
-        ),
-        Node(
-            package='auto_scanner',
             executable='extractor.py',
             name='depth_extract',
-            parameters= [param_file],
+            parameters= [param_file]
         )
     ])

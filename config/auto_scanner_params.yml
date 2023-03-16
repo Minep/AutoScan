@@ -5,5 +5,18 @@ orb_slam3:
     cam_cfg: "data/orb_slam/webcam1.yaml"
     video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid8.mp4"
     fps: 10
+    fps_low: 2
     rescale_w: 1280
     rescale_h: 720
+
+depth_extract:
+  ros__parameters:
+    input_img_w: 1280
+    input_img_h: 720
+    depth_img_w: 1280
+    depth_imh_h: 720
+    weights: "data/simplerecon/hero_model.ckpt"
+    fx: 382.613
+    fy: 382.613
+    cx: 320.183
+    cy: 236.455

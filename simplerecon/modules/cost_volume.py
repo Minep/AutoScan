@@ -4,9 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from modules.networks import MLP
-from utils.generic_utils import combine_dims, tensor_B_to_bM, tensor_bM_to_B
-from utils.geometry_utils import (BackprojectDepth, Project3D, get_camera_rays,
+from .networks import MLP
+from ..utils.generic_utils import combine_dims, tensor_B_to_bM, tensor_bM_to_B
+from ..utils.geometry_utils import (BackprojectDepth, Project3D, get_camera_rays,
                                   pose_distance)
 
 

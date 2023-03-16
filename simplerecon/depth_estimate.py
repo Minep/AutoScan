@@ -2,11 +2,13 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
+import cv2
 
 from queue import Queue
-from utils.geometry_utils import rotx, pose_distance
-from utils.generic_utils import imagenet_normalize, to_gpu
-from depth_model import DepthModel
+from .utils.geometry_utils import rotx, pose_distance
+from .utils.generic_utils import imagenet_normalize, to_gpu
+from .depth_model import DepthModel
+
 
 class FrameHistory:
     def __init__(self, store_count=5) -> None:
@@ -27,15 +29,22 @@ class FrameHistory:
 
 class SimpleRecon:
     def __init__(self, depth_res, frame_res, weights) -> None:
+        torch.set_grad_enabled(False)
+
         self.depth_width, self.depth_height = depth_res
         self.img_width, self.img_height = frame_res
         self.frame_history = FrameHistory(store_count=7)
         
-        self.model = DepthModel.load_from_checkpoint(weights, args=None)
+        self.model = DepthModel.load_from_checkpoint(weights)
         self.model = self.model.cuda().eval()
 
-    def setup_intrinsic(self, cam_K):
-        K = cam_K.clone()
+
+    def setup_intrinsic(self, fx, fy, cy, cx):
+        K = torch.eye(4, dtype=torch.float32)
+        K[0, 0] = float(fx)
+        K[1, 1] = float(fy)
+        K[0, 2] = float(cx)
+        K[1, 2] = float(cy)
         K[0] *= (self.depth_width/self.img_width) 
         K[1] *= (self.depth_height/self.img_height)
         
@@ -46,11 +55,10 @@ class SimpleRecon:
             K_scaled[:2] /= 2 ** i
             invK_scaled = np.linalg.inv(K_scaled)
             self.__camK_data[f"K_s{i}_b44"] = K_scaled
-            self.__camK_data[f"invK_s{i}_b44"] = invK_scaled
+            self.__camK_data[f"invK_s{i}_b44"] = torch.tensor(invK_scaled)
     
     def __get_extrinsic(self, world_T_cam):
         # TODO should we do a coordinate system conversion?
-        world_T_cam = world_T_cam.numpy()
         rot_mat = world_T_cam[:3,:3]
         trans = world_T_cam[:3,3]
 
@@ -63,7 +71,7 @@ class SimpleRecon:
         world_T_cam = world_T_cam
         cam_T_world = np.linalg.inv(world_T_cam)
 
-        return world_T_cam, cam_T_world
+        return torch.tensor(world_T_cam), torch.tensor(cam_T_world)
     
     def __get_frame(self, rgb, pose):
         output_dict = {}
@@ -92,10 +100,15 @@ class SimpleRecon:
                 stacked_src_data[tensor_name] = [t[tensor_name] for t in 
                                                                     src_data]
             else:
-                stacked_src_data[tensor_name] = np.stack([t[tensor_name] 
-                                                    for t in src_data], axis=0)
+                stacked_src_data[tensor_name] = torch.tensor(np.stack([t[tensor_name] 
+                                                    for t in src_data], axis=0))
 
         return stacked_src_data
+
+    def __to_batch_size1(self, data):
+        for k, v in data.items():
+            data[k] = torch.unsqueeze(data[k], 0)
+        return data
     
     def get_depth(self, cur_data, src_data):
         cur_data = to_gpu(cur_data, key_ignores=["frame_id_string"])
@@ -110,34 +123,41 @@ class SimpleRecon:
                                 mode="nearest",
                             )
         
-        return upsampled_depth_pred_b1hw[0,0,:,:]
+        return upsampled_depth_pred_b1hw[0,0,:,:].cpu().detach().numpy()
 
     def process_frame(self, rgb, pose):
+        rgb = cv2.resize(rgb, (self.model.run_opts.image_width, self.model.run_opts.image_height))
         cur_data = self.__get_frame(rgb, pose)
-        if not self.frame_history.build_complete():
-            self.frame_history.add_history(cur_data)
-            return False, None
+        # if not self.frame_history.build_complete():
+        #     self.frame_history.add_history(cur_data)
+        #     return False, None
         
-        src_data_list = self.frame_history.get_history()
+        # src_data_list = self.frame_history.get_history()
+        src_data_list = [
+            cur_data, cur_data, cur_data, cur_data,
+            cur_data, cur_data, cur_data
+        ]   # 7 src image to form cost volume.
         src_data = self.__stack_src_data(src_data_list)
 
-        src_world_T_cam = torch.tensor(src_data["world_T_cam_b44"])
-        cur_cam_T_world = torch.tensor(cur_data["cam_T_world_b44"])
+        # src_world_T_cam = torch.tensor(src_data["world_T_cam_b44"])
+        # cur_cam_T_world = torch.tensor(cur_data["cam_T_world_b44"])
 
-        # Compute cur_cam_T_src_cam
-        cur_cam_T_src_cam = cur_cam_T_world.unsqueeze(0) @ src_world_T_cam
+        # # Compute cur_cam_T_src_cam
+        # cur_cam_T_src_cam = cur_cam_T_world.unsqueeze(0) @ src_world_T_cam
 
-        # get penalties.
-        frame_penalty_k, _, _ = pose_distance(cur_cam_T_src_cam)
+        # # get penalties.
+        # frame_penalty_k, _, _ = pose_distance(cur_cam_T_src_cam)
 
-        # order based on indices
-        indices = torch.argsort(frame_penalty_k).tolist()
-        src_data_list = [src_data_list[index] for index in indices]
+        # # order based on indices
+        # indices = torch.argsort(frame_penalty_k).tolist()
+        # src_data_list = [src_data_list[index] for index in indices]
 
-        # stack again
-        src_data = self.__stack_src_data(src_data_list)
+        # # stack again
+        # src_data = self.__stack_src_data(src_data_list)
 
-        self.frame_history.add_history(cur_data)
+        # self.frame_history.add_history(cur_data)
 
+        cur_data = self.__to_batch_size1(cur_data)
+        src_data = self.__to_batch_size1(src_data)
         return self.get_depth(cur_data, src_data)
 

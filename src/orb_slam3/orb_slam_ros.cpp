@@ -7,13 +7,15 @@ typedef ORB_SLAM3::Tracking::eTrackingState TrackingState;
 
 OrbSlamROS::OrbSlamROS() : rclcpp::Node("orb_slam3") {
     this->decalre_parameters();
-    RCLCPP_INFO_STREAM(this->get_logger(), "Created");
+
 
     std::string voc = this->get_parameter("orb_voc").as_string();
     std::string cam_cfg = this->get_parameter("cam_cfg").as_string();
     this->fps = this->get_parameter("fps").as_int();
+    this->fps_low = this->get_parameter("fps_low").as_int();
     this->frame_interval = 1 / this->fps;
-    this->accumulatedT = Eigen::Matrix4f::Identity();
+    this->fps_scale_ratio = this->fps / this->fps_low;
+    this->counter = this->fps_scale_ratio;
 
     RCLCPP_INFO_STREAM(this->get_logger(), "vocabulary: " << voc);
     RCLCPP_INFO_STREAM(this->get_logger(), "camera config: " << cam_cfg);
@@ -38,6 +40,7 @@ OrbSlamROS::decalre_parameters() {
     this->declare_parameter("orb_voc", "");
     this->declare_parameter("cam_cfg", "");
     this->declare_parameter("fps", 10);
+    this->declare_parameter("fps_low", 2);
     this->declare_parameter("rescale_w", 720);
     this->declare_parameter("rescale_h", 480);
     this->declare_parameter("video_file", "");
@@ -100,7 +103,8 @@ OrbSlamROS::init_opencv_source() {
 
 void 
 OrbSlamROS::setup_topics() {
-    this->poseImgPub = this->create_publisher<auto_scanner::msg::PosedImage>("pose_image", 5);
+    this->poseImgPub = this->create_publisher<auto_scanner::msg::PosedImage>("/orb_slam3/pose_image", 5);
+    this->poseImgPubLow = this->create_publisher<auto_scanner::msg::PosedImage>("/orb_slam3/pose_image_lfreq", 5);
 }
 
 void 
@@ -154,6 +158,12 @@ OrbSlamROS::cv2_feed_spin() {
     piMessage.cam_pose = rosPose;
 
     this->poseImgPub->publish(piMessage);
+
+    this->counter++;
+    if (this->counter > this->fps_scale_ratio) {
+        this->counter = 0;
+        this->poseImgPubLow->publish(piMessage);
+    }
 }
 
 void
