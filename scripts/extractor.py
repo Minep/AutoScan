@@ -88,7 +88,10 @@ class DepthExtractionNode(Node):
         T = self.pose_msg2matrix44(pose.orientation, pose.position);
         depth = self.model.process_frame(cvImg, T)
         depth = cv2.resize(depth, self.depth_img_sz)
-        cv2.imshow("depth", depth)
+        depthScaled = depth.copy() - np.min(depth)
+        depthScaled = depthScaled / np.max(depthScaled) * 256
+        display = cv2.applyColorMap(depthScaled.astype(np.uint8), cv2.COLORMAP_JET)
+        cv2.imshow("depth", display)
         cv2.waitKey(1000)
 
         posedDepth = PosedImage()
