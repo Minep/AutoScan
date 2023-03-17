@@ -2,14 +2,14 @@ import numpy as np
 import cv2
 import sys
 
-row_vert = 10
-col_vert = 7
+row_vert = 7
+col_vert = 10
 
 path = sys.argv[1]
 sample_rate = 1 if len(sys.argv) < 3 else int(sys.argv[2])
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 objp = np.zeros((col_vert * row_vert,3), np.float32)
-objp[:,:2] = np.mgrid[0:col_vert,0:row_vert].T.reshape(-1,2)
+objp[:,:2] = np.mgrid[0:row_vert,0:col_vert].T.reshape(-1,2)
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
 
@@ -41,18 +41,36 @@ while True:
 
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 
+mean_error = 0
+for i in range(len(objpoints)):
+    imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
+    error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
+    mean_error += error
+
 print("""
-cx: {cx},
-cy: {cy},
-fx: {fx},
-fy: {fy},
-distro: {dist}
+cx: {cx:.2f}
+cy: {cy:.2f}
+fx: {fx:.2f}
+fy: {fy:.2f}
+---
+Camera1.cx: {cx:.2f}
+Camera1.cy: {cy:.2f}
+Camera1.fx: {fx:.2f}
+Camera1.fy: {fy:.2f}
+Camera1.k1: {k1:.2f}
+Camera1.k2: {k2:.2f}
+Camera1.p1: {p1:.2f}
+Camera1.p2: {p2:.2f}
 """.format_map({
     "cx": mtx[0, 2],
     "cy": mtx[1, 2],
     "fx": mtx[0, 0],
     "fy": mtx[1, 1],
-    "dist": str(dist)
+    "k1": dist[0, 0],
+    "k2": dist[0, 1],
+    "p1": dist[0, 2],
+    "p2": dist[0, 3],
 }))
+print( "total error: {}".format(mean_error/len(objpoints)) )
 
 cv2.destroyAllWindows()

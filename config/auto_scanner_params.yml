@@ -2,24 +2,24 @@ orb_slam3:
   ros__parameters:
     vid_dev: "/dev/video0"
     orb_voc: "data/orb_slam/ORBvoc.txt"
-    cam_cfg: "data/orb_slam/webcam1.yaml"
-    video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid8.mp4"
-    fps: 10
+    cam_cfg: "data/orb_slam/phonecam.yaml"
+    video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid13.mp4"
+    fps: 20
     fps_low: 5
     rescale_w: 1280
     rescale_h: 720
 
 depth_extract:
   ros__parameters:
-    input_img_w: 1280
-    input_img_h: 720
-    depth_img_w: 1280
-    depth_imh_h: 720
     weights: "data/simplerecon/hero_model.ckpt"
 
 /**:
   ros__parameters:
-    fx: 382.613
-    fy: 382.613
-    cx: 320.183
-    cy: 236.455
+    input_img_w: 1280
+    input_img_h: 720
+    depth_img_w: 1280
+    depth_imh_h: 720
+    cx: 636.39
+    cy: 361.30
+    fx: 707.18
+    fy: 705.91

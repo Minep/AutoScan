@@ -5,10 +5,13 @@
 
 typedef ORB_SLAM3::Tracking::eTrackingState TrackingState;
 
-OrbSlamROS::OrbSlamROS() : rclcpp::Node("orb_slam3") {
+OrbSlamROS::OrbSlamROS() : rclcpp_lifecycle::LifecycleNode("orb_slam3") {
     this->decalre_parameters();
+    this->setup_topics();
+}
 
-
+LCCallbackReturn
+OrbSlamROS::on_configure(const LCState& state) {
     std::string voc = this->get_parameter("orb_voc").as_string();
     std::string cam_cfg = this->get_parameter("cam_cfg").as_string();
     this->fps = this->get_parameter("fps").as_int();
@@ -23,15 +26,34 @@ OrbSlamROS::OrbSlamROS() : rclcpp::Node("orb_slam3") {
     this->SLAM = new ORB_SLAM3::System(voc, cam_cfg, ORB_SLAM3::System::MONOCULAR, true);
     this->imgScale = this->SLAM->GetImageScale();
 
-    this->setup_topics();
-
-    this->init_opencv_source();
+    this->init_opencv_source(); 
 
     int64_t interval = 1000 / this->fps;
+        this->timer = this->create_wall_timer(
+            std::chrono::milliseconds(interval)
+            , std::bind(&OrbSlamROS::cv2_feed_spin, this));   
 
-    this->timer = this->create_wall_timer(
-        std::chrono::milliseconds(interval)
-        , std::bind(&OrbSlamROS::cv2_feed_spin, this));
+    return LCCallbackReturn::SUCCESS;
+}
+
+LCCallbackReturn 
+OrbSlamROS::on_activate(const LCState & previous_state) {
+    this->timer.get()->reset();
+
+    return LCCallbackReturn::SUCCESS;
+}
+
+LCCallbackReturn 
+OrbSlamROS::on_deactivate(const LCState & previous_state) {
+    this->timer.get()->cancel();
+
+    return LCCallbackReturn::SUCCESS;
+}
+
+LCCallbackReturn 
+OrbSlamROS::on_cleanup(const LCState & previous_state) {
+    this->CleanUp();
+    return LCCallbackReturn::SUCCESS;
 }
 
 void 
@@ -103,19 +125,21 @@ OrbSlamROS::init_opencv_source() {
 
 void 
 OrbSlamROS::setup_topics() {
-    this->poseImgPub = this->create_publisher<auto_scanner::msg::PosedImage>("/orb_slam3/pose_image", 5);
+    this->poseImgPub = this->create_publisher<auto_scanner::msg::PosedImage>("/orb_slam3/posed_image", 5);
     this->poseImgPubLow = this->create_publisher<auto_scanner::msg::PosedImage>("/orb_slam3/pose_image_lfreq", 5);
 }
 
 void 
 OrbSlamROS::cv2_feed_spin() {
     if (!this->videoCapture->isOpened()) {
-        RCLCPP_ERROR_STREAM(this->get_logger(), "Gst closed.");
+        RCLCPP_FATAL(this->get_logger(), "Gst closed unexpectively");
+        this->timer.get()->cancel();
         return;
     }
 
     if (!this->videoCapture->read(this->currentFrame)) {
         RCLCPP_WARN(this->get_logger(), "Empty frame!");
+        this->timer.get()->cancel();
         return;
     }
     
@@ -151,7 +175,8 @@ OrbSlamROS::cv2_feed_spin() {
     rosPose.orientation.z = quat.z();
     rosPose.orientation.w = quat.w();
 
-    cv_bridge::CvImage cvImg(header, sensor_msgs::image_encodings::RGB8, this->currentFrame);
+    cv::cvtColor(this->currentFrame, rgbConverted, cv::COLOR_BGR2RGB);
+    cv_bridge::CvImage cvImg(header, sensor_msgs::image_encodings::RGB8, rgbConverted);
 
     auto_scanner::msg::PosedImage piMessage = auto_scanner::msg::PosedImage();
     cvImg.toImageMsg(piMessage.image);

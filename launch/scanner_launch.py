@@ -13,7 +13,7 @@ def generate_launch_description():
             executable='orb_slam3',
             name='orb_slam3',
             remappings = [
-                ("/orb_slam3/pose_image_lfreq", "/extractor/pose_image")
+                ("/orb_slam3/posed_image", "/extractor/posed_image")
             ],
             parameters= [param_file],
         ),
@@ -21,6 +21,15 @@ def generate_launch_description():
             package='auto_scanner',
             executable='extractor.py',
             name='depth_extract',
+            remappings = [
+                ("/extractor/posed_rgbd", "/mesh_fuser/posed_depth")
+            ],
+            parameters= [param_file],
+        ),
+        Node(
+            package='auto_scanner',
+            executable='fuser.py',
+            name='mesh_fuser',
             parameters= [param_file],
         )
     ])

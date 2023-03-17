@@ -24,7 +24,8 @@ class FrameHistory:
         return len(self.__queue) >= self.__count
 
     def add_history(self, frame):
-        self.__queue.popleft()
+        if self.build_complete():
+            self.__queue.popleft()
         self.__queue.append(deep_copy(frame))
 
     def populate(self, frame):
@@ -33,6 +34,12 @@ class FrameHistory:
 
     def get_history(self):
         return [deep_copy(x) for x in self.__queue]
+    
+    def get_history_nocopy(self):
+        return [x for x in self.__queue]
+    
+    def clear(self):
+        self.__queue.clear()
 
 class SimpleRecon:
     def __init__(self, depth_res, frame_res, weights) -> None:
@@ -112,7 +119,7 @@ class SimpleRecon:
 
         return stacked_src_data
 
-    def __to_batch_size1(self, data):
+    def __unitbatch(self, data):
         for k, v in data.items():
             data[k] = data[k].unsqueeze_(0)
         return data
@@ -121,7 +128,7 @@ class SimpleRecon:
         cur_data = to_gpu(cur_data, key_ignores=["frame_id_string"])
         src_data = to_gpu(src_data, key_ignores=["frame_id_string"])
 
-        outputs = self.model.forward(cur_data, src_data)
+        outputs = self.model.forward(cur_data, src_data, True)
         torch.cuda.synchronize()
 
         upsampled_depth_pred_b1hw = F.interpolate(
@@ -135,10 +142,12 @@ class SimpleRecon:
     def process_frame(self, rgb, pose):
         rgb = cv2.resize(rgb, (self.model.run_opts.image_width, self.model.run_opts.image_height))
         cur_data = self.__get_frame(rgb, pose)
-        if not self.frame_history.build_complete():
-            self.frame_history.populate(cur_data)
         
-        src_data_list = self.frame_history.get_history()
+        if not self.frame_history.build_complete():
+            self.frame_history.add_history(cur_data)
+            return False, None
+        
+        src_data_list = self.frame_history.get_history_nocopy()
         src_data = self.__stack_src_data(src_data_list)
 
         src_world_T_cam = torch.tensor(src_data["world_T_cam_b44"])
@@ -157,9 +166,9 @@ class SimpleRecon:
         # stack again
         src_data = self.__stack_src_data(src_data_list)
 
-        self.frame_history.add_history(cur_data)
+        self.frame_history.add_history(deep_copy(cur_data))
 
-        cur_data = self.__to_batch_size1(cur_data)
-        src_data = self.__to_batch_size1(src_data)
-        return self.get_depth(cur_data, src_data)
+        cur_data = self.__unitbatch(cur_data)
+        src_data = self.__unitbatch(src_data)
+        return True, self.get_depth(cur_data, src_data)
 

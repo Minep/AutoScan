@@ -7,14 +7,14 @@ File.version: "1.0"
 
 Camera.type: "PinHole"
 
-Camera1.cx: 636.39
-Camera1.cy: 361.30
-Camera1.fx: 707.18
-Camera1.fy: 705.91
-Camera1.k1: 0.04
-Camera1.k2: -0.19
-Camera1.p1: 0.00
-Camera1.p2: 0.00
+Camera1.cx: 650.46
+Camera1.cy: 351.47
+Camera1.fx: 1261.35
+Camera1.fy: 1262.16
+Camera1.k1: 0.12
+Camera1.k2: -1.55
+Camera1.p1: -0.00
+Camera1.p2: -0.00
 
 # Camera resolution
 Camera.width: 1280
@@ -42,7 +42,7 @@ ORBextractor.nLevels: 8
 # Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.
 # Firstly we impose iniThFAST. If no corners are detected we impose a lower value minThFAST
 # You can lower these values if your images have low contrast			
-ORBextractor.iniThFAST: 18
+ORBextractor.iniThFAST: 17
 ORBextractor.minThFAST: 5
 
 #--------------------------------------------------------------------------------------------

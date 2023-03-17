@@ -59,12 +59,14 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
     "msg/PosedImage.msg"
+    "msg/PosedRGBD.msg"
     DEPENDENCIES sensor_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)
 ament_python_install_package(simplerecon)
 ament_python_install_package(options)
+ament_python_install_package(mesh)
 
 add_executable(orb_slam3 src/orb_slam3/orb_slam_ros.cpp)
 ament_target_dependencies(orb_slam3 rclcpp std_msgs geometry_msgs sensor_msgs ORB_SLAM3 OpenCV cv_bridge Pangolin rclcpp_lifecycle)
@@ -77,6 +79,10 @@ DESTINATION lib/${PROJECT_NAME})
 
 install(PROGRAMS
   scripts/extractor.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(PROGRAMS
+  scripts/fuser.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
