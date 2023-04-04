@@ -166,6 +166,8 @@ class SimpleRecon:
         # stack again
         src_data = self.__stack_src_data(src_data_list)
 
+        # self.frame_history.clear()
+
         self.frame_history.add_history(deep_copy(cur_data))
 
         cur_data = self.__unitbatch(cur_data)

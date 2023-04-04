@@ -41,7 +41,7 @@ class Open3DFuser():
         self.nn = o3d.geometry.KDTreeSearchParamHybrid(radius=self.voxel_size,
                                                 max_nn=30)
 
-        self.enable_icp_finetune = False
+        self.enable_icp_finetune = True
 
     def fuse_frames(self, depths_hw, cam_T_world_44, color_hw):
         color_hw = cv2.resize(color_hw, dsize=(self.width, self.height))
@@ -71,8 +71,9 @@ class Open3DFuser():
     def local_refine(self, rgbd_src, extrinsic_prior):
         pcd_src = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_src, self.K)
         pcd_ds_src = self.preprocess_point_cloud(pcd_src)
+        pcd_ds_src_ = pcd_ds_src.transform(extrinsic_prior)
         result_icp = o3d.pipelines.registration.registration_icp(
-                        pcd_ds_src, self.gpcd, 0.01, extrinsic_prior, 
+                        pcd_ds_src_, self.gpcd, 0.01, extrinsic_prior, 
                         o3d.pipelines.registration.TransformationEstimationPointToPlane())
         T = result_icp.transformation
         self.gpcd += pcd_ds_src.transform(T)

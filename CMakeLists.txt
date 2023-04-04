@@ -13,6 +13,18 @@ else()
   set(ORB_SLAM3_ROOT_DIR $ENV{ORB_SLAM3_LOCATION})
 endif()
 
+if(NOT DEFINED ENV{Open3D_LOCATION})
+  set(O3D_DIR "$ENV{HOME}/opt/open3d")
+else()
+  set(O3D_DIR $ENV{Open3D_LOCATION})
+endif()
+
+if(NOT DEFINED ENV{OCTOMAP_LOCATION})
+  set(OCTOMAP_DIR "$ENV{HOME}/opt/octomap")
+else()
+  set(OCTOMAP_DIR $ENV{OCTOMAP_LOCATION})
+endif()
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
@@ -44,6 +56,8 @@ find_package(OpenCV REQUIRED)
 find_package(Eigen REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(Open3D REQUIRED)
+find_package(Octomap REQUIRED)
 
 find_package(rclpy REQUIRED)
 
@@ -53,6 +67,8 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
   ${EIGEN_INCLUDE_DIRS}
   ${Pangolin_INCLUDE_DIRS}
+  ${Open3D_INCLUDE_DIRS}
+  ${Octomap_INCLUDE_DIRS}
 )
 
 find_package(rosidl_default_generators REQUIRED)
@@ -68,13 +84,22 @@ ament_python_install_package(simplerecon)
 ament_python_install_package(options)
 ament_python_install_package(mesh)
 
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
 add_executable(orb_slam3 src/orb_slam3/orb_slam_ros.cpp)
 ament_target_dependencies(orb_slam3 rclcpp std_msgs geometry_msgs sensor_msgs ORB_SLAM3 OpenCV cv_bridge Pangolin rclcpp_lifecycle)
-rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(orb_slam3 "${cpp_typesupport_target}") 
+
+add_executable(occupancy src/o3d_octomap/occupancy.cpp src/fuser.cpp src/param_helper.cpp)
+ament_target_dependencies(occupancy rclcpp std_msgs geometry_msgs sensor_msgs OpenCV Open3D Octomap cv_bridge)
+target_link_libraries(occupancy "${cpp_typesupport_target}")
 
 install(TARGETS
 orb_slam3
+DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS
+occupancy
 DESTINATION lib/${PROJECT_NAME})
 
 install(PROGRAMS

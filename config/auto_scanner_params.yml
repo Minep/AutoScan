@@ -3,7 +3,7 @@ orb_slam3:
     vid_dev: "/dev/video0"
     orb_voc: "data/orb_slam/ORBvoc.txt"
     cam_cfg: "data/orb_slam/phonecam.yaml"
-    video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid13.mp4"
+    video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid16.mp4"
     fps: 20
     fps_low: 5
     rescale_w: 1280
@@ -18,7 +18,7 @@ depth_extract:
     input_img_w: 1280
     input_img_h: 720
     depth_img_w: 1280
-    depth_imh_h: 720
+    depth_img_h: 720
     cx: 636.39
     cy: 361.30
     fx: 707.18
