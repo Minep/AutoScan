@@ -16,54 +16,25 @@
 #include <opencv2/core.hpp>
 #include <cv_bridge/cv_bridge.h>
 
-typedef rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn LCCallbackReturn;
-typedef rclcpp_lifecycle::State LCState;
-
-class OrbSlamROS : public rclcpp_lifecycle::LifecycleNode {
+class OrbSlamROS : public rclcpp::Node {
 private:
     ORB_SLAM3::System* SLAM;
-    cv::VideoCapture* videoCapture;
-    int fps;
-    int fps_low;
-    int fps_scale_ratio;
-    int frame_interval;
     rclcpp::Publisher<auto_scanner::msg::PosedImage>::SharedPtr poseImgPub;
     rclcpp::Publisher<auto_scanner::msg::PosedImage>::SharedPtr poseImgPubLow;
     rclcpp::TimerBase::SharedPtr timer = nullptr;
     cv::Mat currentFrame;
     cv::Mat rgbConverted;
     float imgScale;
-    long frame_id = 0;
-    int counter = 0;
 
     void decalre_parameters();
 
-    void setup_gst_capture();
-
     void setup_topics();
 
-    void cv2_feed_spin();
-
-    void setup_file_capture(const std::string& file);
-
-    void init_opencv_source();
-
+    void cv2_feed_spin(const sensor_msgs::msg::Image& image);
 public:
     explicit OrbSlamROS();
 
     void CleanUp();
-
-    LCCallbackReturn 
-    on_configure(const LCState & previous_state) override;
-
-    LCCallbackReturn 
-    on_activate(const LCState & previous_state) override;
-
-    LCCallbackReturn 
-    on_deactivate(const LCState & previous_state) override;
-
-    LCCallbackReturn 
-    on_cleanup(const LCState & previous_state) override;
 };
 
 #endif /* CC9D8C15_409B_453E_8E8E_858F8CF97D84 */

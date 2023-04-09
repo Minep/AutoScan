@@ -69,22 +69,29 @@ include_directories(
   ${Pangolin_INCLUDE_DIRS}
   ${Open3D_INCLUDE_DIRS}
   ${Octomap_INCLUDE_DIRS}
+  "install/auto_scanner/include/auto_scanner"
 )
 
 find_package(rosidl_default_generators REQUIRED)
+ament_export_dependencies(rosidl_default_runtime)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
     "msg/PosedImage.msg"
     "msg/PosedRGBD.msg"
+    "srv/CaptureState.srv"
+    "srv/NodeReady.srv"
     DEPENDENCIES sensor_msgs
 )
 
-ament_export_dependencies(rosidl_default_runtime)
 ament_python_install_package(simplerecon)
 ament_python_install_package(options)
 ament_python_install_package(mesh)
 
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+add_executable(gstreaming src/gstreaming/gstreaming.cpp src/param_helper.cpp)
+ament_target_dependencies(gstreaming rclcpp std_msgs sensor_msgs OpenCV cv_bridge)
+target_link_libraries(gstreaming "${cpp_typesupport_target}") 
 
 add_executable(orb_slam3 src/orb_slam3/orb_slam_ros.cpp)
 ament_target_dependencies(orb_slam3 rclcpp std_msgs geometry_msgs sensor_msgs ORB_SLAM3 OpenCV cv_bridge Pangolin rclcpp_lifecycle)
@@ -95,22 +102,18 @@ ament_target_dependencies(occupancy rclcpp std_msgs geometry_msgs sensor_msgs Op
 target_link_libraries(occupancy "${cpp_typesupport_target}")
 
 install(TARGETS
-orb_slam3
-DESTINATION lib/${PROJECT_NAME})
-
-install(TARGETS
-occupancy
-DESTINATION lib/${PROJECT_NAME})
+  orb_slam3
+  occupancy
+  gstreaming
+  DESTINATION lib/${PROJECT_NAME})
 
 install(PROGRAMS
   scripts/extractor.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-install(PROGRAMS
   scripts/fuser.py
+  scripts/control_panel.py
+  scripts/navigator.py
   DESTINATION lib/${PROJECT_NAME}
 )
-
 
 install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config/)
 install(DIRECTORY data/ DESTINATION  share/${PROJECT_NAME}/data/)

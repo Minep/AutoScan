@@ -106,6 +106,7 @@ class DepthExtractionNode(Node):
             return
         
         depth = cv2.resize(depth, self.depth_img_sz)
+        cvImg = cv2.resize(cvImg, self.depth_img_sz)
         depthScaled = depth.copy()
         depthScaled = depthScaled / np.max(depthScaled) * 256
         depthScaled = depthScaled.astype(np.uint8)
@@ -115,7 +116,7 @@ class DepthExtractionNode(Node):
 
         posedRGBD = PosedRGBD()
         posedRGBD.cam_pose = pose;
-        posedRGBD.rgb = img
+        posedRGBD.rgb = cvbridge.cv2_to_imgmsg(cvImg, header=img.header)
         posedRGBD.depth = cvbridge.cv2_to_imgmsg(depthScaled, header=img.header)
         self.poseDepthPub.publish(posedRGBD)
 

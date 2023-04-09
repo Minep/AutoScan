@@ -41,6 +41,13 @@ def get_raw_image_size(ros_node: Node):
 
     return w, h
 
+def get_shared_param(ros_node: Node):
+    return {
+        'raw_size': get_raw_image_size(ros_node),
+        'depth_size': get_depth_size(ros_node),
+        'intrinsic': get_intrinsic_components(ros_node)
+    }
+
 def pose_msg2matrix44(q: Quaternion, t: Vector3):
     qx, qy, qz, qw = q.x, q.y, q.z, q.w
     tx, ty, tz = t.x, t.y, t.z

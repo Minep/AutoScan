@@ -2,22 +2,39 @@
 
 #include <open3d/Open3D.h>
 #include <opencv2/opencv.hpp>
+#include <octomap/octomap.h>
+#include <octomap/ColorOcTree.h>
 
 #include "param_helper.hpp"
 #include "auto_scanner/msg/posed_rgbd.hpp"
 
+// #define ICP_PAIR_WISE
+
 class Fuser {
 private:
-    open3d::pipelines::integration::ScalableTSDFVolume* tsdf;
-    open3d::camera::PinholeCameraIntrinsic* camK;
-    open3d::geometry::KDTreeSearchParamHybrid* kdSearch;
-    open3d::geometry::PointCloud gpcd;
+    std::shared_ptr<open3d::pipelines::integration::ScalableTSDFVolume> tsdf;
+    std::shared_ptr<open3d::camera::PinholeCameraIntrinsic> camK;
+    std::shared_ptr<open3d::camera::PinholeCameraParameters> camParam;
+    std::shared_ptr<open3d::geometry::KDTreeSearchParamHybrid> kdSearch;
 
     std::shared_ptr<open3d::geometry::TriangleMesh> saved_geometry = nullptr;
+    std::shared_ptr<open3d::geometry::PointCloud> saved_occupancy = nullptr;
     std::shared_ptr<open3d::visualization::Visualizer> vis = nullptr;
 
+    std::shared_ptr<octomap::OcTree> ocMapping;
+    std::shared_ptr<octomap::Pointcloud> ocPcd;
+
+#ifdef ICP_PAIR_WISE
+    std::shared_ptr<open3d::geometry::PointCloud> prev_pcd = nullptr;
+#else
+    open3d::geometry::PointCloud gpcd;
+#endif
     open3d::geometry::Image depth_o3d;
     open3d::geometry::Image rgb_o3d;
+    
+    Eigen::Matrix4d LH2RH;
+
+    GeometryParams geoParam;
     
     int depth_width = 0, depth_height = 0;
     int max_fusion_depth = 0;
@@ -26,16 +43,29 @@ private:
     bool first_frame = false;
     bool enable_vis = false;
 public:
-    Fuser(const SharedParams& param, double resoluion, int max_depth, bool enable_vis);
+    Fuser(const SharedParams& param, int max_depth, bool enable_vis);
     void Release();
-    void FuseRGBDMessage(const auto_scanner::msg::PosedRGBD& rgbd_msg);
-    void FuseFrame(cv::Mat& rgb, cv::Mat& depth, Eigen::Matrix4d& extrinsic);
+    
+    void
+    FuseRGBDMessage(const auto_scanner::msg::PosedRGBD& rgbd_msg);
+
+    void
+    FuseFrame(cv::Mat& rgb, cv::Mat& depth, Eigen::Matrix4d& extrinsic);
+    
     std::shared_ptr<open3d::geometry::PointCloud> GetPointCloud();
     std::shared_ptr<open3d::geometry::TriangleMesh> GetMesh();
 
     void UpdateVisLoop();
-    void UpdateVisGeometry();
+    void UpdateVisMesh();
+    void UpdateVisOccupancy();
+
+    const std::shared_ptr<octomap::OcTree> occupancy() const {
+        return this->ocMapping;
+    }
 
 protected:
-    Eigen::Matrix4d LocalFinetuning(open3d::geometry::RGBDImage& rgbd, Eigen::Matrix4d& extrinsic_prior);
+    Eigen::Matrix4d LocalFinetuning(
+        const std::shared_ptr<open3d::geometry::PointCloud> pcd, 
+        Eigen::Matrix4d& extrinsic_prior
+    );
 };

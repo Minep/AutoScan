@@ -47,7 +47,7 @@ for i in range(len(objpoints)):
     error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
     mean_error += error
 
-print("""
+formatted = """
 cx: {cx:.2f}
 cy: {cy:.2f}
 fx: {fx:.2f}
@@ -70,7 +70,14 @@ Camera1.p2: {p2:.2f}
     "k2": dist[0, 1],
     "p1": dist[0, 2],
     "p2": dist[0, 3],
-}))
+})
+
+import os
+
+with open(path + ".txt", 'w') as f:
+    f.write(formatted)
+    
+print(formatted)
 print( "total error: {}".format(mean_error/len(objpoints)) )
 
 cv2.destroyAllWindows()

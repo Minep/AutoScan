@@ -1,5 +1,40 @@
 #include "param_helper.hpp"
 
+
+void ReadCameraIntrinsic(rclcpp::Node* node, CameraIntrinsic& intrinsic) {
+    try
+    {
+        node->declare_parameter("fx", 720.0);
+        node->declare_parameter("fy", 640.0);
+        node->declare_parameter("cx", 10.0);
+        node->declare_parameter("cy", 10.0);
+    }
+    catch(const rclcpp::exceptions::ParameterAlreadyDeclaredException& e)
+    {
+        // nothing to do
+    }
+    
+    intrinsic.fx = node->get_parameter("fx").as_double();
+    intrinsic.fy = node->get_parameter("fy").as_double();
+    intrinsic.cx = node->get_parameter("cx").as_double();
+    intrinsic.cy = node->get_parameter("cy").as_double();
+}
+
+void ReadGeometryParams(rclcpp::Node* node, GeometryParams& geo_param) {
+    try
+    {
+        node->declare_parameter("res_recon", 0.02);
+        node->declare_parameter("res_process", 0.2);
+    }
+    catch(const rclcpp::exceptions::ParameterAlreadyDeclaredException& e)
+    {
+        // nothing to do
+    }
+    
+    geo_param.resolution_proc = node->get_parameter("res_process").as_double();
+    geo_param.resolution_recon = node->get_parameter("res_recon").as_double();
+}
+
 void ReadSharedParams(rclcpp::Node* node, SharedParams& params) {
     try
     {
@@ -19,23 +54,5 @@ void ReadSharedParams(rclcpp::Node* node, SharedParams& params) {
     params.input_h = node->get_parameter("input_img_h").as_int();
 
     ReadCameraIntrinsic(node, params.intrinsic);
-}
-
-void ReadCameraIntrinsic(rclcpp::Node* node, CameraIntrinsic& intrinsic) {
-    try
-    {
-        node->declare_parameter("fx", 720.0);
-        node->declare_parameter("fy", 640.0);
-        node->declare_parameter("cx", 10.0);
-        node->declare_parameter("cy", 10.0);
-    }
-    catch(const rclcpp::exceptions::ParameterAlreadyDeclaredException& e)
-    {
-        // nothing to do
-    }
-    
-    intrinsic.fx = node->get_parameter("fx").as_double();
-    intrinsic.fy = node->get_parameter("fy").as_double();
-    intrinsic.cx = node->get_parameter("cx").as_double();
-    intrinsic.cy = node->get_parameter("cy").as_double();
+    ReadGeometryParams(node, params.geoParam);
 }

@@ -150,8 +150,8 @@ class SimpleRecon:
         src_data_list = self.frame_history.get_history_nocopy()
         src_data = self.__stack_src_data(src_data_list)
 
-        src_world_T_cam = torch.tensor(src_data["world_T_cam_b44"])
-        cur_cam_T_world = torch.tensor(cur_data["cam_T_world_b44"])
+        src_world_T_cam = src_data["world_T_cam_b44"]
+        cur_cam_T_world = cur_data["cam_T_world_b44"]
 
         # Compute cur_cam_T_src_cam
         cur_cam_T_src_cam = cur_cam_T_world.unsqueeze(0) @ src_world_T_cam

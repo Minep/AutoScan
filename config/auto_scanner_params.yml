@@ -1,13 +1,16 @@
-orb_slam3:
+gstreaming:
   ros__parameters:
     vid_dev: "/dev/video0"
+    video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid19.mp4"
+    fps_rescale: 20
+    default_on: false
+    single_step: false
+
+orb_slam3:
+  ros__parameters:
     orb_voc: "data/orb_slam/ORBvoc.txt"
-    cam_cfg: "data/orb_slam/phonecam.yaml"
-    video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid16.mp4"
-    fps: 20
+    cam_cfg: "data/orb_slam/phonecam_iphone.yaml"
     fps_low: 5
-    rescale_w: 1280
-    rescale_h: 720
 
 depth_extract:
   ros__parameters:
@@ -17,9 +20,11 @@ depth_extract:
   ros__parameters:
     input_img_w: 1280
     input_img_h: 720
-    depth_img_w: 1280
-    depth_img_h: 720
-    cx: 636.39
-    cy: 361.30
-    fx: 707.18
-    fy: 705.91
+    depth_img_w: 720
+    depth_img_h: 480
+    cx: 948.22
+    cy: 535.96
+    fx: 1640.52
+    fy: 1639.06
+    res_recon: 0.01
+    res_process: 0.03
