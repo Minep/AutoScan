@@ -3,7 +3,7 @@
 
 #include "gstreaming/gstreaming.hpp"
 
-GstreamingNode::GstreamingNode() : rclcpp::Node("gstreaming") {
+GstreamingNode::GstreamingNode() : HealthReportingNode("gstreaming") {
     this->declare_parameter("video_dev", "/dev/video0");
     this->declare_parameter("video_file", "");
     this->declare_parameter("fps_rescale", 20);
@@ -26,14 +26,14 @@ GstreamingNode::GstreamingNode() : rclcpp::Node("gstreaming") {
         "decodebin ! videoconvert ! videorate ! videoscale ! "
         "video/x-raw, framerate=%d/1, width=%d, height=%d ! "
         "appsink drop=1";
-        n = snprintf(buf, 1024, g_str, fps_rescaled, this->params.input_w, this->params.input_h);
+        n = snprintf(buf, 1024, g_str, video_dev.c_str(), fps_rescaled, this->params.input_w, this->params.input_h);
     }
     else {
         auto g_str = "filesrc location=%s ! "
         "decodebin ! videoconvert ! videorate ! videoscale ! "
         "video/x-raw, framerate=%d/1, width=%d, height=%d ! "
         "appsink drop=1";
-        n = snprintf(buf, 1024, g_str, fps_rescaled, this->params.input_w, this->params.input_h);
+        n = snprintf(buf, 1024, g_str, video_file.c_str(), fps_rescaled, this->params.input_w, this->params.input_h);
     }
 
     this->increament = 1'000'000'000ul / fps_rescaled;
@@ -41,7 +41,7 @@ GstreamingNode::GstreamingNode() : rclcpp::Node("gstreaming") {
     std::string gstr = std::string(buf, n);
     this->capture = std::make_shared<cv::VideoCapture>(gstr, cv::CAP_GSTREAMER);
 
-    RCLCPP_INFO(this->get_logger(), "Gstreamer config: %s", gstr);
+    RCLCPP_INFO(this->get_logger(), "Gstreamer config: %s", gstr.c_str());
 
     if (!this->capture->isOpened()) {
         RCLCPP_FATAL(this->get_logger(), "fail to open gstreamer for capturing");
@@ -49,18 +49,20 @@ GstreamingNode::GstreamingNode() : rclcpp::Node("gstreaming") {
         return;
     }
 
-    this->captureStateChanged = this->create_publisher<std_msgs::msg::Bool>("state_changed", 5);
-    this->rawImgStream = this->create_publisher<sensor_msgs::msg::Image>("rgb", 5);
+    this->captureStateChanged = this->create_publisher<std_msgs::msg::Bool>("/gstreaming/state_changed", 5);
+    this->rawImgStream = this->create_publisher<sensor_msgs::msg::Image>("/gstreaming/rgb", 5);
     this->readStream = this->create_wall_timer(
         std::chrono::milliseconds(1000 / fps_rescaled),
         std::bind(&GstreamingNode::ReadVideoStream, this)
     );
     this->captureStateChange = this->create_service<auto_scanner::srv::CaptureState>(
-        "capturing", std::bind(
+        "/gstreaming/capturing", std::bind(
             &GstreamingNode::OnCaptureStateToggled, 
             this, 
             std::placeholders::_1, std::placeholders::_2)
     );
+
+    this->inform_ready();
 }
 
 inline void 
@@ -97,14 +99,13 @@ GstreamingNode::ReadVideoStream() {
 
     {
         std_msgs::msg::Header header;
-        header.stamp = rclcpp::Time(this->timestamp);
+        header.stamp = this->now();
         header.frame_id = this->frame_id;
 
         cv::cvtColor(this->currentFrame, this->currentFrame, cv::COLOR_BGR2RGB);
         auto cvMsg = cv_bridge::CvImage(header, sensor_msgs::image_encodings::RGB8, this->currentFrame).toImageMsg();
         this->rawImgStream->publish(*cvMsg);
         
-        this->timestamp += this->increament;
         this->frame_id++;
     }
 

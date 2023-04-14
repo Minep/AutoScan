@@ -9,10 +9,11 @@ import cv2
 import numpy as np
 
 from options.utils import get_intrinsic_components, pose_msg2matrix44, get_depth_size
+from options.heath_node import HeathReportingNode
 
 import rclpy
 
-class MeshFuserNode(Node):
+class MeshFuserNode(HeathReportingNode):
     def __init__(self) -> None:
         super().__init__("mesh_fuser")
 
@@ -27,6 +28,8 @@ class MeshFuserNode(Node):
             qos_profile=50)
 
         self.viewer_loop = self.create_timer(1 / 20, lambda: self.viewer.tick())
+
+        self._inform_ready()
     
     def __depth_map_callback(self, msg: PosedRGBD):
         rgb_msg, depth_msg, pose_msg = msg.rgb, msg.depth, msg.cam_pose

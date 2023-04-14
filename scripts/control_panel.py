@@ -3,29 +3,27 @@
 import rclpy
 import numpy as np
 import threading
-import time
 
 import tkinter as tk
-from tkinter import ttk
-from PIL import ImageTk, Image
-import cv2
-import open3d as o3d
+import queue
 
 from rclpy.node import Node
-from cv_bridge import CvBridge
 
-from options.utils import get_shared_param, pose_msg2matrix44
+from options.utils import get_shared_param
 from auto_scanner.srv import NodeReady, CaptureState
-from auto_scanner.msg import PosedRGBD
+from std_msgs.msg import Bool
 
 def threaded(fn):
     def wrapper(*args, **kwargs):
-        threading.Thread(target=fn, args=args, kwargs=kwargs).start()
+        thread = threading.Thread(target=fn, daemon=True, args=args, kwargs=kwargs).start()
     return wrapper
 
 class ControlPanelWindow(tk.Tk):
     def __init__(self, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
+        self.button_state = "Capture"
+        self.button_state2 = "Start Recon."
+
         self.__wmsize = (256, 400)
         self.__node_panels = {}
 
@@ -39,7 +37,6 @@ class ControlPanelWindow(tk.Tk):
         self.__setup_layout()
 
         self.notify_state_change = None
-        self.button_state = "Start"
 
     def __setup_layout(self):
         master_frame = tk.Frame(self, width=self.__wmsize[0], height=self.__wmsize[1])
@@ -49,20 +46,37 @@ class ControlPanelWindow(tk.Tk):
         self.__node_state_frame = tk.Frame(master_frame, height=self.__wmsize[1] - 50, width=256)
         self.__node_state_frame.pack(side=tk.TOP)
         self.__node_state_frame.pack_propagate(False)
+
         bottom_frame = tk.Frame(master_frame, height=50, width=256)
         bottom_frame.pack(side=tk.TOP)
         bottom_frame.pack_propagate(False)
-        self.__start_button = tk.Button(bottom_frame, text="Start", command=self.__on_button_clicked)
-        self.__start_button.place(relx=0.5, rely=0.5, anchor="center")
+
+        bottom_innerframe = tk.Frame(bottom_frame)
+        bottom_innerframe.place(relx=0.5, rely=0.5, anchor="center")
+        
+        self.__start_button = tk.Button(bottom_innerframe, text=self.button_state, command=self.__on_button_clicked)
+        self.__start_button.pack(side=tk.LEFT)
+
+        self.__start_recon_button = tk.Button(bottom_innerframe, text=self.button_state2, command=self.__on_start_recon_clicked)
+        self.__start_recon_button.pack(side=tk.LEFT)
 
     def __on_button_clicked(self):
         if self.notify_state_change is not None:
-            preview_state = "Stop" if self.button_state == "Start" else "Start"
-            can_change = self.notify_state_change(self.button_state == "Start")
+            preview_state = "Stop" if self.button_state == "Capture" else "Capture"
+            can_change = self.notify_state_change(("capture", self.button_state == "Capture"))
             if not can_change:
                 return
             self.button_state = preview_state
             self.__start_button.config(text=self.button_state)
+
+    def __on_start_recon_clicked(self):
+        if self.notify_state_change is not None:
+            preview_state = "Stop Recon." if self.button_state2 == "Start Recon." else "Start Recon."
+            can_change = self.notify_state_change(("recon", self.button_state2 == "Start Recon."))
+            if not can_change:
+                return
+            self.button_state2 = preview_state
+            self.__start_recon_button.config(text=self.button_state2)
 
     def add_node(self, name):
         if name in self.__node_panels:
@@ -88,35 +102,68 @@ class ControlPanel(Node):
     def __init__(self):
         super().__init__("control_panel")
         self.shared_param = get_shared_param(self)
-        self.__control_panel_ui = ControlPanelWindow()
         
-        self.declare_parameter("node_list", [])
+        self.declare_parameter("node_list", [""])
         self.barrier = {}
         for node_name in self.get_parameter("node_list").value:
             self.barrier[node_name] = False
-            self.__control_panel_ui.add_node(node_name)
         
-        
-        self.create_service(NodeReady, "inform_ready", lambda req, resp: self.__on_node_ready(req, resp))
-        self.capture_state = self.create_client(CaptureState, "capture_state")
+        self.create_service(NodeReady, "/control_panel/inform_ready", self.__on_node_ready)
+        self.recon_state = self.create_publisher(Bool, "/control_panel/recon_state", 5)
+        self.capture_state = self.create_client(CaptureState, "/gstreaming/capturing")
+        #self.create_timer(0.5, callback=self.__check_ros_msg)
 
-        self.__control_panel_ui.notify_state_change = lambda x: self.__publish_state_change(x)
+        self.__queue2ui = queue.Queue()
+        self.__lock_ui = threading.Lock()
+
+        # self.capture_state.wait_for_service(30)
+        # if not self.capture_state.service_is_ready():
+        #     self.get_logger().warn("no gstreaming node detected")
+
+        self.__ui_loop()
+    
+    @threaded
+    def __ui_loop(self):    
+        self.__control_panel_ui = ControlPanelWindow()
+        for node in self.barrier.keys():
+            self.__control_panel_ui.add_node(node)
+        self.__control_panel_ui.notify_state_change = self.__send_msg_to_ros
+        self.__control_panel_ui.after(1000, self.__check_ui_msg)
         self.__control_panel_ui.mainloop()
-        self.__navigator_ui.start_navigator_loop(30)
 
-    def __change_capture_state(self, state: bool):
+    def __send_msg_to_ros(self, x):
+        t, state = x
+        self.get_logger().info("%s, %s"%(t, str(state)))
+        if t == 'capture':
+            self.__change_capture_state(self.capture_state, state)
+        elif t == 'recon':
+            b = Bool()
+            b.data = state
+            self.recon_state.publish(b)
+        return True
+
+    def __send_msg_to_ui(self, x):
+        with self.__lock_ui:
+            self.__queue2ui.put(x)
+
+    def __check_ui_msg(self):
+        with self.__lock_ui:
+            while not self.__queue2ui.empty():
+                node, state = self.__queue2ui.get()
+                self.__control_panel_ui.change_node_state(node, state)
+        self.__control_panel_ui.after(1000, self.__check_ui_msg)
+
+    def __change_capture_state(self, client, state: bool):
         state_msg = CaptureState.Request()
         state_msg.desire_state = state
-        future = self.capture_state.call_async(state_msg)
-        while rclpy.ok():
-            rclpy.spin_once(self)
-            if future.done():
-                break
-    
+        future = client.call_async(state_msg)
+        #rclpy.spin_until_future_complete(self, future)
+
     def __on_node_ready(self, req: NodeReady.Request, resp: NodeReady.Response):
+        self.get_logger().info("ready: %s"%(req.node_name))
         if req.node_name in self.barrier and not self.barrier[req.node_name]:
             self.barrier[req.node_name] = True
-            self.__control_panel_ui.change_node_state(req.node_name, True)
+            self.__send_msg_to_ui((req.node_name, True))
             resp.ack_name = req.node_name
         else:
             resp.ack_name = "invalid"

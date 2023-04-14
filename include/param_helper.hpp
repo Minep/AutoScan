@@ -12,6 +12,8 @@ typedef struct CameraIntrinsic {
 typedef struct GeometryParams {
     double resolution_recon;
     double resolution_proc;
+    double w_scale_ratio;
+    double h_scale_ratio;
 } GeometryParams;
 
 typedef struct SharedParams {

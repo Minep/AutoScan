@@ -13,7 +13,7 @@ objp[:,:2] = np.mgrid[0:row_vert,0:col_vert].T.reshape(-1,2)
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
 
-gst_string = "filesrc location={} ! decodebin ! videoconvert ! videorate ! video/x-raw, framerate={}/1 ! appsink"
+gst_string = "filesrc location={} ! qtdemux ! avdec_h264 ! videoconvert ! videorate ! video/x-raw, framerate={}/1 ! appsink"
 
 gst = gst_string.format(path, sample_rate)
 print(gst)

@@ -3,28 +3,34 @@
 import rclpy
 import numpy as np
 import threading
-import time
 
-import tkinter as tk
-from tkinter import ttk
-from PIL import ImageTk, Image
 import cv2
 import open3d as o3d
 
 from rclpy.node import Node
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import Point
 
-from options.utils import get_shared_param, pose_msg2matrix44
-from auto_scanner.srv import NodeReady, CaptureState
-from auto_scanner.msg import PosedRGBD
+from options.utils import pose_msg2matrix44, get_shared_param
+from options.heath_node import HeathReportingNode
+from auto_scanner.srv import NodeReady
+from auto_scanner.msg import PosedRGBD, PosedImage
 
 
 class Navigator():
-    def __init__(self) -> None:
-        self.preview_size = (144, 256, 3)
-        self.depth_preview = np.full(self.preview_size, 30, order='C', dtype=np.uint8)
+    def __init__(self, param) -> None:
+        self.preview_size = (288, 512, 3)
+        self.scale_ratio = (
+            self.preview_size[0] / param['raw_size'][1],
+            self.preview_size[1] / param['raw_size'][0]
+        )
+        preview_size_mono = (self.preview_size[0], self.preview_size[1])
+        
+        self.depth_preview = np.full(preview_size_mono, 30, order='C', dtype=np.uint8)
         self.rgb_feed = np.full(self.preview_size, 30, order='C', dtype=np.uint8)
+        self.slam_feed = np.full(self.preview_size, 30, order='C', dtype=np.uint8)
+        self.slam_points = []
         self.current_pose_inv = np.identity(4)
         self.goal_point = np.ones(4)
         self.__lock = threading.Lock()
@@ -33,10 +39,11 @@ class Navigator():
 
         self.rgb_changed = True
         self.depth_changed = True
+        self.slam_changed = True
 
-        self.navigator_panel = (256, self.preview_size[1] * 2)
+        self.navigator_panel = (self.preview_size[0] * 2, self.preview_size[1] * 2)
         self.frame_buffer = np.zeros(
-            (self.preview_size[0] + self.navigator_panel[0], self.navigator_panel[1], 3), 
+            (self.navigator_panel[0], self.navigator_panel[1], 3), 
             order='C', dtype=np.uint8
         )
         
@@ -89,11 +96,11 @@ class Navigator():
         self.proj_matrix = self.create_projection_matrix(100, 0, 1)
 
         self.compass_position = np.array([
-            self.navigator_panel[1] / 4, 
-            self.preview_size[0] + self.navigator_panel[0] / 2])
+            self.navigator_panel[1] / 8 * 5, 
+            self.navigator_panel[0] / 4])
         self.elevation_position = np.array([
-            self.navigator_panel[1] / 4 * 3 , 
-            self.preview_size[0] + self.navigator_panel[0] / 2])
+            self.navigator_panel[1] / 8 * 7 , 
+            self.navigator_panel[0] / 4])
             
 
     def create_projection_matrix(self, fov, near, far):
@@ -122,18 +129,28 @@ class Navigator():
         with self.__lock:
             self.goal_point = goal
 
-    def set_pose(self, pose):
+    def set_slam(self, pose, slam_rgb, trakers):
         with self.__lock:
+            h,w,d = self.preview_size
+            cv2.resize(src=slam_rgb, dsize=(w, h), dst=self.slam_feed)
+            cv2.cvtColor(src=self.slam_feed, code=cv2.COLOR_RGB2GRAY, dst=self.slam_feed)
+            self.slam_feed[:,:,1] = self.slam_feed[:,:,0]
+            self.slam_feed[:,:,2] = self.slam_feed[:,:,0]
+            self.slam_points = trakers
             self.current_pose_inv = np.linalg.inv(pose)
+            self.slam_changed = True
 
     def set_rgb(self, rgb):
         with self.__lock_rgb:
-            np.copyto(self.rgb_feed, rgb, casting='no')
+            h,w,d = self.preview_size
+            cv2.resize(src=rgb, dsize=(w, h), dst=self.rgb_feed)
+            cv2.cvtColor(src=self.rgb_feed, code=cv2.COLOR_RGB2BGR, dst=self.rgb_feed)
             self.rgb_changed = True
     
     def set_depth(self, depth):
         with self.__lock_depth:
-            np.copyto(self.depth_preview, depth, casting='no')
+            h,w,d = self.preview_size
+            cv2.resize(src=depth, dsize=(w, h), dst=self.depth_preview)
             self.depth_changed = True
 
     def stop(self):
@@ -142,7 +159,9 @@ class Navigator():
     def update(self, delay):
         with self.__lock_depth:
             if self.depth_changed:
-                self.frame_buffer[:self.preview_size[0], self.preview_size[1]:, :] = self.depth_preview
+                self.frame_buffer[self.preview_size[0]:, self.preview_size[1]:, 0] = self.depth_preview
+                self.frame_buffer[self.preview_size[0]:, self.preview_size[1]:, 1] = self.depth_preview
+                self.frame_buffer[self.preview_size[0]:, self.preview_size[1]:, 2] = self.depth_preview
                 self.depth_changed = False
         
         with self.__lock_rgb:
@@ -151,79 +170,108 @@ class Navigator():
                 self.depth_changed = False
         
         with self.__lock:
-            self.frame_buffer[self.preview_size[0]:, :, :].fill(0)
-            goal_point_local = self.current_pose_inv @ self.goal_point
-            direction = goal_point_local / np.linalg.norm(goal_point_local, ord=2)
-            crx = direction[0] # direction cross Z
-            theta = np.arccos(direction[2])  # direction dot Z
-            if crx < 0:
-                theta = 2 * 3.1416 - theta
-            
-            # draw compass pointer
-            self.__update_arrow_rotation(theta)
-            M = self.view_matrix @ self.proj_matrix
-            arrow = (self.__compass_shape @ self.__R_compass @ M) * self.navigator_panel[0]
-            outline = (self.__compass_shape_outline @ M) * self.navigator_panel[0]
-            ticks = np.einsum("ijl,lk->ijk", self.__compass_shape_ticks, M) * self.navigator_panel[0]
+            if self.slam_changed:
+                # slam view
+                self.frame_buffer[
+                    self.preview_size[0]:, 
+                    :self.preview_size[1], :] = self.slam_feed
+                
+                G = np.array([0, 255, 0])
+                for p in self.slam_points:
+                    p: Point = p
+                    if p.x < 0 or p.y < 0:
+                        continue
+                    self.frame_buffer[
+                        int(self.preview_size[0] + p.y * self.scale_ratio[0]),
+                        int(p.x * self.scale_ratio[1]),
+                        :
+                    ] = G
+                
+                self.frame_buffer[:self.preview_size[0], self.preview_size[1]:, :].fill(0)
+                goal_point_local = self.current_pose_inv @ self.goal_point
+                direction = goal_point_local / np.linalg.norm(goal_point_local, ord=2)
+                crx = direction[0] # direction cross Z
+                theta = np.arccos(direction[2])  # direction dot Z
+                if crx < 0:
+                    theta = 2 * 3.1416 - theta
+                
+                # draw compass pointer
+                self.__update_arrow_rotation(theta)
+                M = self.view_matrix @ self.proj_matrix
+                arrow = (self.__compass_shape @ self.__R_compass @ M) * self.preview_size[0]
+                outline = (self.__compass_shape_outline @ M) * self.preview_size[0]
+                ticks = np.einsum("ijl,lk->ijk", self.__compass_shape_ticks, M) * self.preview_size[0]
 
-            cv2.fillPoly(
-                self.frame_buffer, 
-                pts=[np.int32(arrow[:,:2] + self.compass_position)], 
-                color=(255, 212, 59),
-                lineType=cv2.LINE_AA)
-            cv2.polylines(
-                self.frame_buffer, 
-                pts=[np.int32(outline[:,:2] + self.compass_position)], 
-                isClosed=True,
-                color=(255, 212, 59),
-                lineType=cv2.LINE_AA,
-                thickness=2)
-            cv2.polylines(
-                self.frame_buffer,
-                pts=np.int32(ticks[:,:,:2] + self.compass_position),
-                isClosed=False,
-                color=(255, 212, 59),
-                lineType=cv2.LINE_AA,
-                thickness=1
-            )
-            
-            # elevation indicator
-            self.__S_elevation[1,1] = direction[1]
-            elevation = (self.__elevation_shape @ self.__S_elevation) * self.navigator_panel[0]
-            cv2.arrowedLine(
-                self.frame_buffer, 
-                pt2=np.int32(elevation[0,:2] + self.elevation_position), 
-                pt1=np.int32(elevation[1,:2] + self.elevation_position), 
-                color=(255, 212, 59),
-                line_type=cv2.LINE_AA,
-                thickness=2,
-                tipLength=0.2)
+                cv2.fillPoly(
+                    self.frame_buffer, 
+                    pts=[np.int32(arrow[:,:2] + self.compass_position)], 
+                    color=(255, 212, 59),
+                    lineType=cv2.LINE_AA)
+                cv2.polylines(
+                    self.frame_buffer, 
+                    pts=[np.int32(outline[:,:2] + self.compass_position)], 
+                    isClosed=True,
+                    color=(255, 212, 59),
+                    lineType=cv2.LINE_AA,
+                    thickness=2)
+                cv2.polylines(
+                    self.frame_buffer,
+                    pts=np.int32(ticks[:,:,:2] + self.compass_position),
+                    isClosed=False,
+                    color=(255, 212, 59),
+                    lineType=cv2.LINE_AA,
+                    thickness=1
+                )
+                
+                # elevation indicator
+                self.__S_elevation[1,1] = direction[1]
+                elevation = (self.__elevation_shape @ self.__S_elevation) * self.preview_size[0]
+                cv2.arrowedLine(
+                    self.frame_buffer, 
+                    pt2=np.int32(elevation[0,:2] + self.elevation_position), 
+                    pt1=np.int32(elevation[1,:2] + self.elevation_position), 
+                    color=(255, 212, 59),
+                    line_type=cv2.LINE_AA,
+                    thickness=2,
+                    tipLength=0.2)
+            self.slam_changed = False
 
         cv2.imshow("preview", self.frame_buffer)
         cv2.waitKey(delay=delay)
     
-class NavigatorNode(Node):
+class NavigatorNode(HeathReportingNode):
     def __init__(self):
         super().__init__("navigator")
 
+        param = get_shared_param(self)
         delay = 1 / 24
-        self.navigator_window = Navigator()
+        self.navigator_window = Navigator(param)
         self.create_timer(delay, lambda: self.navigator_window.update(int(delay * 1000)))
-        self.create_subscription(PosedRGBD, "posed_rgbd", lambda x: self.__posed_rgbd_recieved(x), 10)
-        self.create_subscription(Image, "rgb", lambda x: self.__posed_rgb_recieved(x), 10)
+        self.create_subscription(PosedRGBD, "/navigator/rgbd", self.__posed_rgbd_recieved, 10)
+        self.create_subscription(PosedImage, "/navigator/slam", self.__slam_recieved, 10)
+        self.create_subscription(Image, "/navigator/rgb", self.__posed_rgb_recieved, 10)
+        self.cv_convertor = CvBridge()
+        
+        self._inform_ready()
+
+    def __slam_recieved(self, msg: PosedImage):
+        pose, rgb, points = msg.cam_pose, msg.image, msg.tracked_points
+        pose = pose_msg2matrix44(pose.orientation, pose.position)
+
+        rgb_cv = self.cv_convertor.imgmsg_to_cv2(rgb)
+
+        self.navigator_window.set_slam(pose, rgb_cv, points)
 
     def __posed_rgbd_recieved(self, msg: PosedRGBD):
-        depth, cam_pose = msg.depth, msg.cam_pose
-        pose = pose_msg2matrix44(cam_pose.orientation, cam_pose.position)
-        depth_cv = CvBridge.imgmsg_to_cv2(depth)
+        depth = msg.depth
+        depth_cv = self.cv_convertor.imgmsg_to_cv2(depth)
         depth_cv = (depth_cv / np.max(depth_cv) * 255).astype(np.uint8)
         
-        self.navigator_window.set_pose(pose)
         self.navigator_window.set_depth(depth_cv)
     
     def __posed_rgb_recieved(self, msg: Image):
-        img = CvBridge.imgmsg_to_cv2(msg)
-        
+        img = self.cv_convertor.imgmsg_to_cv2(msg)
+
         self.navigator_window.set_rgb(img)
 
 def main():

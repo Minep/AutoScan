@@ -33,6 +33,7 @@ void ReadGeometryParams(rclcpp::Node* node, GeometryParams& geo_param) {
     
     geo_param.resolution_proc = node->get_parameter("res_process").as_double();
     geo_param.resolution_recon = node->get_parameter("res_recon").as_double();
+
 }
 
 void ReadSharedParams(rclcpp::Node* node, SharedParams& params) {
@@ -52,6 +53,9 @@ void ReadSharedParams(rclcpp::Node* node, SharedParams& params) {
     params.depth_h = node->get_parameter("depth_img_h").as_int();
     params.input_w = node->get_parameter("input_img_w").as_int();
     params.input_h = node->get_parameter("input_img_h").as_int();
+
+    params.geoParam.w_scale_ratio = (double)params.depth_w / (double)params.input_w;
+    params.geoParam.h_scale_ratio = (double)params.depth_h / (double)params.input_h;
 
     ReadCameraIntrinsic(node, params.intrinsic);
     ReadGeometryParams(node, params.geoParam);

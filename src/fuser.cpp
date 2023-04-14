@@ -1,3 +1,6 @@
+// #define ICP_PAIR_WISE
+#define ENABLE_ICP_FINETUNE
+
 #include "fuser.hpp"
 #include "cv_bridge/cv_bridge.h"
 #include "geometry_msgs/msg/pose.hpp"
@@ -14,8 +17,8 @@ Fuser::Fuser(const SharedParams& param, int max_depth = 256, bool enable_vis = t
     
     this->camK = std::make_shared<open3d::camera::PinholeCameraIntrinsic>(
         param.depth_w, param.depth_h,
-        K.fx, K.fy,
-        K.cx, K.cy
+        K.fx * this->geoParam.w_scale_ratio, K.fy * this->geoParam.h_scale_ratio,
+        K.cx * this->geoParam.w_scale_ratio, K.cy * this->geoParam.h_scale_ratio
     );
     this->camParam = std::make_shared<open3d::camera::PinholeCameraParameters>();
 
@@ -58,6 +61,10 @@ Fuser::Fuser(const SharedParams& param, int max_depth = 256, bool enable_vis = t
     this->rgb_o3d.Prepare(this->depth_width, this->depth_height, 3, 1);
 }
 
+void Fuser::SetPose(const Eigen::Matrix4d& pose) {
+    this->camParam->extrinsic_ = pose * this->LH2RH;
+}
+
 void Fuser::Release() {
     if (this->enable_vis) {
         this->vis->DestroyVisualizerWindow();
@@ -96,7 +103,13 @@ Fuser::FuseFrame(cv::Mat& rgb, cv::Mat& depth, Eigen::Matrix4d& extrinsic) {
 
     auto pcd = open3d::geometry::PointCloud::CreateFromRGBDImage(*rgbd, *this->camK);
     auto pcd_downsampled = pcd->VoxelDownSample(this->geoParam.resolution_proc);
-    auto fine_tuned = this->LocalFinetuning(pcd, extrinsic);
+    
+#ifdef ENABLE_ICP_FINETUNE
+    Eigen::Matrix4d fine_tuned = this->LocalFinetuning(pcd, extrinsic);
+#else
+    Eigen::Matrix4d& fine_tuned = extrinsic;
+#endif
+
     auto o3d_frame = fine_tuned * this->LH2RH;
 
     this->tsdf->Integrate(*rgbd, *this->camK, o3d_frame);
@@ -121,12 +134,12 @@ Fuser::FuseFrame(cv::Mat& rgb, cv::Mat& depth, Eigen::Matrix4d& extrinsic) {
     rgbd.reset();
     pcd_downsampled.reset();
 
-    this->camParam->extrinsic_ = extrinsic * this->LH2RH;
+    // this->camParam->extrinsic_ = extrinsic * this->LH2RH;
 }
 
 Eigen::Matrix4d 
 Fuser::LocalFinetuning(const std::shared_ptr<open3d::geometry::PointCloud> pcd, Eigen::Matrix4d& extrinsic_prior) {
-    auto pcd_down = pcd->VoxelDownSample(this->geoParam.resolution_proc * 2);
+    auto pcd_down = pcd->VoxelDownSample(this->geoParam.resolution_proc);
     pcd_down->EstimateNormals(*this->kdSearch);
     pcd_down->Transform(extrinsic_prior);
 

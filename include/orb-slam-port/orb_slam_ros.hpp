@@ -12,18 +12,22 @@
 #include "System.h"
 
 #include "auto_scanner/msg/posed_image.hpp"
+#include "health_node.hpp"
 
 #include <opencv2/core.hpp>
 #include <cv_bridge/cv_bridge.h>
 
-class OrbSlamROS : public rclcpp::Node {
+class OrbSlamROS : public HealthReportingNode {
 private:
     ORB_SLAM3::System* SLAM;
     rclcpp::Publisher<auto_scanner::msg::PosedImage>::SharedPtr poseImgPub;
-    rclcpp::Publisher<auto_scanner::msg::PosedImage>::SharedPtr poseImgPubLow;
+    rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr pose;
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr rgbIn;
     rclcpp::TimerBase::SharedPtr timer = nullptr;
     cv::Mat currentFrame;
     cv::Mat rgbConverted;
+    double scale_w;
+    double scale_h;
     float imgScale;
 
     void decalre_parameters();

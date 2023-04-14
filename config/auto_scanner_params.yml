@@ -1,7 +1,7 @@
 gstreaming:
   ros__parameters:
-    vid_dev: "/dev/video0"
-    video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid19.mp4"
+    video_dev: "/dev/video4"
+    # video_file: "/home/lxsky/ucl-cs/y4/fyp/3d-scanner/images/vid19.mp4"
     fps_rescale: 20
     default_on: false
     single_step: false
@@ -9,7 +9,7 @@ gstreaming:
 orb_slam3:
   ros__parameters:
     orb_voc: "data/orb_slam/ORBvoc.txt"
-    cam_cfg: "data/orb_slam/phonecam_iphone.yaml"
+    cam_cfg: "data/orb_slam/webcam_hikvision_dse12.yaml"
     fps_low: 5
 
 depth_extract:
@@ -18,13 +18,13 @@ depth_extract:
 
 /**:
   ros__parameters:
-    input_img_w: 1280
-    input_img_h: 720
-    depth_img_w: 720
-    depth_img_h: 480
-    cx: 948.22
-    cy: 535.96
-    fx: 1640.52
-    fy: 1639.06
+    input_img_w: 1920
+    input_img_h: 1080
+    depth_img_w: 1280
+    depth_img_h: 720
+    cx: 1007.89
+    cy: 547.17
+    fx: 1346.31
+    fy: 1011.07
     res_recon: 0.01
-    res_process: 0.03
+    res_process: 0.05

@@ -5,10 +5,10 @@
 #include <octomap/octomap.h>
 #include <octomap/ColorOcTree.h>
 
+#include "geometry_msgs/msg/pose.hpp"
+
 #include "param_helper.hpp"
 #include "auto_scanner/msg/posed_rgbd.hpp"
-
-// #define ICP_PAIR_WISE
 
 class Fuser {
 private:
@@ -58,6 +58,7 @@ public:
     void UpdateVisLoop();
     void UpdateVisMesh();
     void UpdateVisOccupancy();
+    void SetPose(const Eigen::Matrix4d& pose);
 
     const std::shared_ptr<octomap::OcTree> occupancy() const {
         return this->ocMapping;
@@ -68,4 +69,5 @@ protected:
         const std::shared_ptr<open3d::geometry::PointCloud> pcd, 
         Eigen::Matrix4d& extrinsic_prior
     );
+
 };

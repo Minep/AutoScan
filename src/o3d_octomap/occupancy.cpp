@@ -1,8 +1,11 @@
 #include "o3d_octomap/occupancy.hpp"
 
 #include <chrono>
+#include <float.h>
 
-OccupancyMethod::OccupancyMethod() : rclcpp::Node("occupancy") {
+#define PI 3.1416
+
+OccupancyMethod::OccupancyMethod() : HealthReportingNode("occupancy") {
 
     ReadSharedParams(this, this->params);
 
@@ -15,10 +18,33 @@ OccupancyMethod::OccupancyMethod() : rclcpp::Node("occupancy") {
     this->octree = std::make_shared<octomap::OcTree>(this->params.geoParam.resolution_proc);
     this->octoPcd = std::make_shared<octomap::Pointcloud>();
 
+    this->pose_subscription = this->create_subscription<geometry_msgs::msg::Pose>(
+        "/fuser/cam_pose", 5, std::bind(&OccupancyMethod::PoseUpdated, this, std::placeholders::_1));
+
     this->rgbd_subscription = this->create_subscription<auto_scanner::msg::PosedRGBD>("/occupancy/rgbd", 20, 
         std::bind(&OccupancyMethod::ProcessRGBDMessage, this, std::placeholders::_1));
 
     this->viz_loop = this->create_wall_timer(std::chrono::milliseconds(40), std::bind(&Fuser::UpdateVisLoop, this->fuser.get()));
+
+    std::random_device rdev;
+    this->rng = std::mt19937(rdev());
+    this->dist_phi = std::uniform_int_distribution<std::mt19937::result_type>(0, 90);
+    this->dist_theta = std::uniform_int_distribution<std::mt19937::result_type>(0, 359);
+
+    this->inform_ready();
+}
+
+void OccupancyMethod::PoseUpdated(const geometry_msgs::msg::Pose& pose) {
+    auto qr = pose.orientation;
+    auto pos = pose.position;
+    
+    Eigen::Quaterniond q(qr.w, qr.x, qr.y, qr.z);
+    Eigen::Matrix4d T;
+    T.setIdentity();
+    T.block<3,3>(0,0) = q.toRotationMatrix();
+    T.block<3,1>(0,3) = Eigen::Vector3d(pos.x, pos.y, pos.z);
+
+    this->fuser->SetPose(T);
 }
 
 void OccupancyMethod::ProcessRGBDMessage(const auto_scanner::msg::PosedRGBD& rgbd) const {
@@ -36,56 +62,38 @@ void OccupancyMethod::ProcessRGBDMessage(const auto_scanner::msg::PosedRGBD& rgb
 void 
 OccupancyMethod::LocateUnknownRegion(octomap::point3d& result, octomap::point3d sensor_origin) {
     auto occupancy = this->fuser->occupancy();
-    octomap::point3d split_center = sensor_origin;
-    octomap::point3d vert_max = occupancy->getBBXMax();
-    octomap::point3d vert_min = occupancy->getBBXMin();
-    int depth = 1, max_depth = occupancy->getTreeDepth();
-    int dim_idx = 0;
-    bool found = false;
 
     octomap::OcTreeKey key;
     octomap::OcTreeNode* node;
-    while (!found || depth <= max_depth)
-    {
-        for (int i = 0; i < 3; i++) {
-            int dim = i % 3;
-            float old_val = split_center(dim);
-            double prob_occ_r = 0, prob_occ_l = 0;
-            // right hand side
-            split_center(dim) = (vert_max(dim) + old_val) / 2;
-            if (!occupancy->coordToKeyChecked(split_center, depth, key) ||
-                !(node = occupancy->search(key, depth))) {
-                // found unknow area
-                found = true;
-                break;
-            }
-            prob_occ_r = node->getMeanChildLogOdds();
+    // TODO: sample rays from the hemisphere around user and do ray casting, to see whether it is
+    //       unknown area. The optimal ray will be elected by distance from user.
 
-            // search left
-            split_center(dim) = (vert_min(dim) - old_val) / 2;
-            if (!occupancy->coordToKeyChecked(split_center, depth, key) ||
-                !(node = occupancy->search(key, depth))) {
-                // found unknow area
-                found = true;
-                break;
-            }
-            prob_occ_l = node->getMeanChildLogOdds();
+    octomap::point3d dir;
+    octomap::point3d end;
+    octomap::point3d best;
+    double d = DBL_MAX;
 
-            if (prob_occ_l <= prob_occ_r) {
-                vert_max(dim) = old_val;
-            }
-            else {
-                vert_min(dim) = old_val;
-                split_center(dim) = (vert_max(dim) + old_val) / 2;
-            }
+    for (int i = 0; i < 360; i++) {
+        double theta = i / 180 * PI;
+        double phi = (double)dist_phi(this->rng) / 180 * PI;
+        double ct = std::cos(theta), st = std::sin(theta);
+        double cp = std::cos(phi), sp = std::sin(phi);
+        dir.x() = st * sp;
+        dir.y() = -ct * sp;
+        dir.z() = cp;
+
+        if(occupancy->castRay(sensor_origin, dir, end)) {
+            continue;
         }
 
-        depth++;
+        double d_ = end.distance(sensor_origin);
+        if (d_ < d) {
+            d = d_;
+            best = end;
+        }
     }
-    
-    result(0) = key.k[0];
-    result(1) = key.k[1];
-    result(2) = key.k[2];
+
+    result = best;
 }
 
 void OccupancyMethod::Release() {

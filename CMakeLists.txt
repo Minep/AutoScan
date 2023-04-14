@@ -89,15 +89,30 @@ ament_python_install_package(mesh)
 
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
-add_executable(gstreaming src/gstreaming/gstreaming.cpp src/param_helper.cpp)
+add_executable(
+  gstreaming 
+  src/gstreaming/gstreaming.cpp 
+  src/param_helper.cpp 
+  src/health_node.cpp
+)
 ament_target_dependencies(gstreaming rclcpp std_msgs sensor_msgs OpenCV cv_bridge)
 target_link_libraries(gstreaming "${cpp_typesupport_target}") 
 
-add_executable(orb_slam3 src/orb_slam3/orb_slam_ros.cpp)
+add_executable(
+  orb_slam3 
+  src/orb_slam3/orb_slam_ros.cpp 
+  src/health_node.cpp
+  src/param_helper.cpp
+)
 ament_target_dependencies(orb_slam3 rclcpp std_msgs geometry_msgs sensor_msgs ORB_SLAM3 OpenCV cv_bridge Pangolin rclcpp_lifecycle)
 target_link_libraries(orb_slam3 "${cpp_typesupport_target}") 
 
-add_executable(occupancy src/o3d_octomap/occupancy.cpp src/fuser.cpp src/param_helper.cpp)
+add_executable(
+  occupancy 
+  src/o3d_octomap/occupancy.cpp 
+  src/fuser.cpp src/param_helper.cpp 
+  src/health_node.cpp
+)
 ament_target_dependencies(occupancy rclcpp std_msgs geometry_msgs sensor_msgs OpenCV Open3D Octomap cv_bridge)
 target_link_libraries(occupancy "${cpp_typesupport_target}")
 

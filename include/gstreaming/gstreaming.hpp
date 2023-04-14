@@ -7,9 +7,10 @@
 #include <std_msgs/msg/bool.hpp>
 
 #include "param_helper.hpp"
+#include "health_node.hpp"
 #include "auto_scanner/srv/capture_state.hpp"
 
-class GstreamingNode : public rclcpp::Node {
+class GstreamingNode : public HealthReportingNode {
 private:
     std::shared_ptr<cv::VideoCapture> capture;
     SharedParams params;

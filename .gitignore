@@ -6,4 +6,5 @@ calibration_data
 __pycache__
 data/orb_slam/ORBvoc.txt
 **.ckpt
-images/
+images
+.VSCodeCounter/

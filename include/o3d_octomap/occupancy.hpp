@@ -6,9 +6,13 @@
 
 #include "fuser.hpp"
 #include "param_helper.hpp"
+#include "health_node.hpp"
 #include "auto_scanner/msg/posed_rgbd.hpp"
+#include "geometry_msgs/msg/pose.hpp"
 
-class OccupancyMethod : public rclcpp::Node {
+#include <random>
+
+class OccupancyMethod : public HealthReportingNode {
 private:
     std::shared_ptr<Fuser> fuser;
     std::shared_ptr<octomap::OcTree> octree;
@@ -18,6 +22,11 @@ private:
 
     rclcpp::TimerBase::SharedPtr viz_loop;
     rclcpp::Subscription<auto_scanner::msg::PosedRGBD>::SharedPtr rgbd_subscription;
+    rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr pose_subscription;
+
+    std::mt19937 rng;
+    std::uniform_int_distribution<std::mt19937::result_type> dist_phi;
+    std::uniform_int_distribution<std::mt19937::result_type> dist_theta;
 
 public:
     OccupancyMethod();
@@ -28,6 +37,8 @@ public:
 
 protected:
     void LocateUnknownRegion(octomap::point3d& result, octomap::point3d sensor_origin);
+
+    void PoseUpdated(const geometry_msgs::msg::Pose& pose);
 };
 
 

@@ -2,12 +2,15 @@
 
 #include <opencv2/core/core.hpp>
 #include "Tracking.h"
+#include "param_helper.hpp"
 
 typedef ORB_SLAM3::Tracking::eTrackingState TrackingState;
 
-OrbSlamROS::OrbSlamROS() : rclcpp::Node("orb_slam3") {
+OrbSlamROS::OrbSlamROS() : HealthReportingNode("orb_slam3") {
     this->decalre_parameters();
-    this->setup_topics();
+
+    SharedParams param;
+    ReadSharedParams(this, param);
 
     std::string voc = this->get_parameter("orb_voc").as_string();
     std::string cam_cfg = this->get_parameter("cam_cfg").as_string();
@@ -15,11 +18,16 @@ OrbSlamROS::OrbSlamROS() : rclcpp::Node("orb_slam3") {
     RCLCPP_INFO_STREAM(this->get_logger(), "vocabulary: " << voc);
     RCLCPP_INFO_STREAM(this->get_logger(), "camera config: " << cam_cfg);
 
-    this->SLAM = new ORB_SLAM3::System(voc, cam_cfg, ORB_SLAM3::System::MONOCULAR, true);
+    this->SLAM = new ORB_SLAM3::System(voc, cam_cfg, ORB_SLAM3::System::MONOCULAR, false);
     this->imgScale = this->SLAM->GetImageScale();
 
-    this->create_subscription<sensor_msgs::msg::Image>("rgbd_in", 5, std::bind(&OrbSlamROS::cv2_feed_spin, this, std::placeholders::_1));
+    ORB_SLAM3::Settings* setting = this->SLAM->GetSetting();
+    cv::Size new_sz = setting->newImSize();
+    this->scale_h = param.input_h / new_sz.height;
+    this->scale_w = param.input_w / new_sz.width;
 
+    this->setup_topics();
+    this->inform_ready();
 }
 
 void 
@@ -30,14 +38,17 @@ OrbSlamROS::decalre_parameters() {
 
 void 
 OrbSlamROS::setup_topics() {
+    this->rgbIn = this->create_subscription<sensor_msgs::msg::Image>("/orb_slam3/rgb_in", 5, std::bind(&OrbSlamROS::cv2_feed_spin, this, std::placeholders::_1));
+    this->rgbIn = this->create_subscription<sensor_msgs::msg::Image>("/orb_slam3/rgb_in", 5, std::bind(&OrbSlamROS::cv2_feed_spin, this, std::placeholders::_1));
     this->poseImgPub = this->create_publisher<auto_scanner::msg::PosedImage>("/orb_slam3/posed_image", 5);
-    this->poseImgPubLow = this->create_publisher<auto_scanner::msg::PosedImage>("/orb_slam3/pose_image_lfreq", 5);
+    this->pose = this->create_publisher<geometry_msgs::msg::Pose>("/orb_slam3/pose", 5);
 }
 
 void 
 OrbSlamROS::cv2_feed_spin(const sensor_msgs::msg::Image& image) {
     cv_bridge::CvImagePtr rgb = cv_bridge::toCvCopy(image);
     cv::Mat frame = rgb->image;
+    double inv_imgscale = 1 / this->imgScale;
 
     if (this->imgScale != 1.f) {
         int w = frame.cols * this->imgScale;
@@ -45,7 +56,8 @@ OrbSlamROS::cv2_feed_spin(const sensor_msgs::msg::Image& image) {
         cv::resize(frame, frame, cv::Size(w, h));
     }
 
-    double sec = image.header.stamp.nanosec * 1e-9;
+    auto ts = image.header.stamp;
+    double sec = (double)ts.nanosec * 1e-9 + (double)ts.sec;
     auto pose = this->SLAM->TrackMonocular(frame, sec);
     
     if (this->SLAM->GetTrackingState() != TrackingState::OK) {
@@ -69,7 +81,18 @@ OrbSlamROS::cv2_feed_spin(const sensor_msgs::msg::Image& image) {
     auto_scanner::msg::PosedImage piMessage = auto_scanner::msg::PosedImage();
     piMessage.image = image;
     piMessage.cam_pose = rosPose;
+    
+    auto keypoints = this->SLAM->GetTrackedKeyPointsUn();
+    geometry_msgs::msg::Point pt;
+    int i = 0;
+    for (auto it = keypoints.begin(); it != keypoints.end(); it++, i++) {
+        auto kp = it.base();
+        pt.x = kp->pt.x * this->scale_w * inv_imgscale;
+        pt.y = kp->pt.y * this->scale_h * inv_imgscale;
+        piMessage.tracked_points.push_back(pt);
+    }
 
+    this->pose->publish(rosPose);
     this->poseImgPub->publish(piMessage);
 }
 
